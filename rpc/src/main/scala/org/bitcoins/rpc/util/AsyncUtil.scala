@@ -5,8 +5,8 @@ import java.io.PrintStream
 import akka.actor.ActorSystem
 import org.bitcoins.core.util.BitcoinSLogger
 
+import scala.concurrent._
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
-import scala.concurrent.{Await, Future, Promise}
 
 trait AsyncUtil extends BitcoinSLogger {
 

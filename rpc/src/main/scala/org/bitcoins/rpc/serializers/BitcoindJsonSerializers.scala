@@ -11,7 +11,11 @@ import org.bitcoins.core.crypto.{
 import org.bitcoins.core.currency.{Bitcoins, Satoshis}
 import org.bitcoins.core.number.{Int32, UInt32, UInt64}
 import org.bitcoins.core.protocol.blockchain.{Block, BlockHeader, MerkleBlock}
-import org.bitcoins.core.protocol.script.{ScriptPubKey, ScriptSignature}
+import org.bitcoins.core.protocol.script.{
+  ScriptPubKey,
+  ScriptSignature,
+  WitnessVersion
+}
 import org.bitcoins.core.protocol.transaction.{
   Transaction,
   TransactionInput,
@@ -25,13 +29,33 @@ import org.bitcoins.core.protocol.{
 }
 import org.bitcoins.core.wallet.fee.BitcoinFeeUnit
 import org.bitcoins.rpc.jsonmodels._
-import org.bitcoins.rpc.serializers.JsonReaders._
-import org.bitcoins.rpc.serializers.JsonWriters._
+import org.bitcoins.rpc.serializers.BitcoindJsonReaders._
+import org.bitcoins.rpc.serializers.BitcoindJsonWriters._
+import org.joda.time.DateTime
+import org.joda.time.format.ISODateTimeFormat
 import play.api.libs.functional.syntax._
 import play.api.libs.json._
 
-object JsonSerializers {
+object BitcoindJsonSerializers {
   implicit val bigIntReads: Reads[BigInt] = BigIntReads
+
+  private val dateFormat = ISODateTimeFormat.dateTime()
+
+  implicit val jodaDateWrites: Writes[DateTime] = {
+    Writes[DateTime] { d =>
+      JsString(d.toString(dateFormat))
+    }
+  }
+
+  implicit val jodaDateReads: Reads[DateTime] = {
+    Reads[DateTime] {
+      case jStr: JsString =>
+        JsSuccess(DateTime.parse(jStr.toString, dateFormat))
+      case JsNumber(num) if num.isValidLong =>
+        JsSuccess(new DateTime(num.toLongExact))
+      case err => JsError(s"Expected long or String, got ${err.toString()}")
+    }
+  }
 
   // Internal Types
   implicit val doubleSha256DigestReads: Reads[DoubleSha256Digest] =
@@ -64,6 +88,7 @@ object JsonSerializers {
   implicit val uRIReads: Reads[URI] = URIReads
   implicit val scriptSignatureReads: Reads[ScriptSignature] =
     ScriptSignatureReads
+  implicit val witnessVersionReads: Reads[WitnessVersion] = WitnessVersionReads
 
   implicit val bitcoinsWrites: Writes[Bitcoins] = BitcoinsWrites
   implicit val bitcoinAddressWrites: Writes[BitcoinAddress] =
@@ -230,6 +255,12 @@ object JsonSerializers {
   implicit val receivedAccountReads: Reads[ReceivedAccount] =
     Json.reads[ReceivedAccount]
 
+  implicit val receivedLabelReads: Reads[ReceivedLabel] =
+    Json.reads[ReceivedLabel]
+
+  implicit val labelResult: Reads[LabelResult] =
+    Json.reads[LabelResult]
+
   implicit val paymentReads: Reads[Payment] =
     ((__ \ "involvesWatchonly").readNullable[Boolean] and
       (__ \ "account").readNullable[String] and
@@ -297,6 +328,12 @@ object JsonSerializers {
   implicit val validateAddressResultReads: Reads[ValidateAddressResult] =
     Json.reads[ValidateAddressResult]
 
+  implicit val embeddedResultReads: Reads[EmbeddedResult] =
+    Json.reads[EmbeddedResult]
+
+  implicit val addressInfoResultReads: Reads[AddressInfoResult] =
+    Json.reads[AddressInfoResult]
+
   implicit val estimateSmartFeeResultReads: Reads[EstimateSmartFeeResult] =
     Json.reads[EstimateSmartFeeResult]
 
@@ -305,6 +342,11 @@ object JsonSerializers {
     Map[DoubleSha256Digest, GetMemPoolResult]] =
     Reads.mapReads[DoubleSha256Digest, GetMemPoolResult](s =>
       JsSuccess(DoubleSha256Digest.fromHex(s)))
+
+  implicit def mapAddressesByLabelReads: Reads[
+    Map[BitcoinAddress, LabelResult]] =
+    Reads.mapReads[BitcoinAddress, LabelResult](s =>
+      JsSuccess(BitcoinAddress.fromString(s).get))
 
   implicit val outputMapWrites: Writes[Map[BitcoinAddress, Bitcoins]] =
     mapWrites[BitcoinAddress, Bitcoins](_.value)

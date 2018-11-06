@@ -3,11 +3,21 @@ package org.bitcoins.rpc.serializers
 import java.io.File
 import java.net.{InetAddress, URI}
 
-import org.bitcoins.core.crypto._
+import org.bitcoins.core.crypto.{
+  DoubleSha256Digest,
+  ECPublicKey,
+  Sha256Hash160Digest,
+  _
+}
 import org.bitcoins.core.currency.{Bitcoins, Satoshis}
 import org.bitcoins.core.number.{Int32, Int64, UInt32, UInt64}
 import org.bitcoins.core.protocol.blockchain.{Block, BlockHeader, MerkleBlock}
-import org.bitcoins.core.protocol.script.{ScriptPubKey, ScriptSignature}
+import org.bitcoins.core.protocol.script.{
+  ScriptPubKey,
+  ScriptSignature,
+  WitnessVersion,
+  WitnessVersion0
+}
 import org.bitcoins.core.protocol.transaction._
 import org.bitcoins.core.protocol.{
   Address,
@@ -16,12 +26,58 @@ import org.bitcoins.core.protocol.{
   P2SHAddress
 }
 import org.bitcoins.core.wallet.fee.{BitcoinFeeUnit, SatoshisPerByte}
+import org.bitcoins.rpc.client.RpcOpts.LabelPurpose
 import org.bitcoins.rpc.jsonmodels.RpcAddress
 import play.api.libs.json._
 
 import scala.util.{Failure, Success}
 
-object JsonReaders {
+object BitcoindJsonReaders {
+  // For use in implementing reads method of Reads[T] where T is constructed from a JsNumber via numFunc
+  private def processJsNumber[T](numFunc: BigDecimal => T)(
+      json: JsValue): JsResult[T] = json match {
+    case JsNumber(n) => JsSuccess(numFunc(n))
+    case err @ (JsNull | _: JsBoolean | _: JsString | _: JsArray |
+        _: JsObject) =>
+      buildJsErrorMsg("jsnumber", err)
+  }
+
+  // For use in implementing reads method of Reads[T] where T is constructed from a JsString via strFunc
+  private def processJsString[T](strFunc: String => T)(
+      json: JsValue): JsResult[T] = json match {
+    case JsString(s) => JsSuccess(strFunc(s))
+    case err @ (JsNull | _: JsBoolean | _: JsNumber | _: JsArray |
+        _: JsObject) =>
+      buildJsErrorMsg("jsstring", err)
+  }
+
+  private def buildJsErrorMsg(expected: String, err: JsValue): JsError = {
+    JsError(s"error.expected.$expected, got ${Json.toJson(err).toString()}")
+  }
+
+  private def buildErrorMsg(expected: String, err: Any): JsError = {
+    JsError(s"error.expected.$expected, got ${err.toString}")
+  }
+
+  implicit object LabelPurposeReads extends Reads[LabelPurpose] {
+    override def reads(json: JsValue): JsResult[LabelPurpose] =
+      json match {
+        case JsString("send")    => JsSuccess(LabelPurpose.Send)
+        case JsString("receive") => JsSuccess(LabelPurpose.Receive)
+        // TODO better error message?
+        case err => buildErrorMsg(expected = "send or receive", err)
+      }
+  }
+
+  implicit object WitnessVersionReads extends Reads[WitnessVersion] {
+    override def reads(json: JsValue): JsResult[WitnessVersion] =
+      json match {
+        case JsNumber(num) if num == 0 => JsSuccess(WitnessVersion0)
+        case JsNumber(num) if num != 0 =>
+          buildErrorMsg("Expected witness_version 0", num)
+        case err => buildErrorMsg("Expected numerical witness_version", err)
+      }
+  }
 
   implicit object BigIntReads extends Reads[BigInt] {
     override def reads(json: JsValue): JsResult[BigInt] =
@@ -239,7 +295,7 @@ object JsonReaders {
   }
 
   implicit object TransactionOutPointReads extends Reads[TransactionOutPoint] {
-    private case class OutPoint(txid: DoubleSha256Digest, vout: UInt32)
+
     override def reads(json: JsValue): JsResult[TransactionOutPoint] = {
       implicit val outPointReads: Reads[OutPoint] = Json.reads[OutPoint]
       json.validate[OutPoint] match {
@@ -249,6 +305,8 @@ object JsonReaders {
           JsError(s"Could not parse TransactionOutPoint, got ${err.toString()}")
       }
     }
+
+    private case class OutPoint(txid: DoubleSha256Digest, vout: UInt32)
   }
 
   implicit object RpcAddressReads extends Reads[RpcAddress] {
@@ -303,4 +361,5 @@ object JsonReaders {
     override def reads(json: JsValue): JsResult[URI] =
       SerializerUtil.processJsString[URI](str => new URI("http://" + str))(json)
   }
+
 }

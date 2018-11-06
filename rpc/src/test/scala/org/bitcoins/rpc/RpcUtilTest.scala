@@ -10,13 +10,13 @@ import org.bitcoins.rpc.util.RpcUtil
 import org.scalatest.{AsyncFlatSpec, BeforeAndAfterAll}
 
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Success, Try}
 
 class RpcUtilTest extends AsyncFlatSpec with BeforeAndAfterAll {
 
-  implicit val system = ActorSystem("RpcUtilTest_ActorSystem")
-  implicit val ec = system.dispatcher
+  implicit val system: ActorSystem = ActorSystem("RpcUtilTest_ActorSystem")
+  implicit val ec: ExecutionContext = system.dispatcher
 
   private def trueLater(delay: Int = 1000): Future[Boolean] = Future {
     Thread.sleep(delay)
@@ -31,7 +31,7 @@ class RpcUtilTest extends AsyncFlatSpec with BeforeAndAfterAll {
 
   private def boolLaterDoneAndTrue(
       trueLater: Future[Boolean]): () => Future[Boolean] = { () =>
-    boolLaterDoneAnd(true, trueLater)
+    boolLaterDoneAnd(bool = true, trueLater)
   }
 
   behavior of "RpcUtil"
@@ -107,12 +107,12 @@ class RpcUtilTest extends AsyncFlatSpec with BeforeAndAfterAll {
 
   it should "be able to create a single node, wait for it to start and then delete it" in {
     implicit val m: ActorMaterializer = ActorMaterializer.create(system)
-    implicit val ec = m.executionContext
+    implicit val ec: ExecutionContext = m.executionContext
 
     val instance = BitcoindRpcTestUtil.instance()
     val client = new BitcoindRpcClient(instance)
     client.start()
-    RpcUtil.awaitCondition(client.isStarted)
+    RpcUtil.awaitCondition(() => client.isStarted)
     assert(client.isStarted)
     client.stop()
     RpcUtil.awaitServerShutdown(client)

@@ -10,7 +10,10 @@ import org.bitcoins.core.protocol.transaction.{Transaction, TransactionInput}
 import org.bitcoins.core.util.BitcoinSUtil
 import play.api.libs.json._
 
-object JsonWriters {
+import scala.language.implicitConversions
+
+object BitcoindJsonWriters {
+
   implicit object BitcoinsWrites extends Writes[Bitcoins] {
     override def writes(o: Bitcoins): JsValue = JsNumber(o.toBigDecimal)
   }
